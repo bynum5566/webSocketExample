@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8"/>
+    <title>點對點聊天測試頁 (ReconnectingWebSocket)</title>
+    <script src="../js/reconnectingwebsocket.js" type="text/javascript" charset="utf-8"></script>
+    <script src="../js/jquery.min.js" type="text/javascript" charset="utf-8"></script>
+    <link rel="stylesheet" type="text/css" href="../css/style.css">
+</head>
+<body>
+<div id="info">
+    <div>發送人：<input type="text" id="suer" required="required" placeholder="請輸入發送人"></div>
+    <div>接收人：<input type="text" id="ruser" required="required" placeholder="請輸入接收人"></div>
+</div>
+<div id="index">
+</div>
+<div class="msg">
+    <textarea id="send_content" placeholder="請在此輸入消息..."></textarea>
+</div>
+<div class="ibtn c">
+    <button onclick=openWebsocket()>開啟連線</button>
+    <button onclick=closeWebsocket()>關閉連線</button>
+    <button onclick=sendMessage()>發送訊息</button>
+    <span>使用說明: 請先填寫發送人即可點開啟連線；建立連線後可填寫接收人，再寄送訊息</span>
+</div>
+<script type="text/javascript">
+    document.getElementById('send_content').focus();
+
+    var websocket = null;
+
+    // 開啟websocket
+    function openWebsocket() {
+        username = $("#suer").val()
+        if (username != "") {
+            //確認當下瀏覽時是否支援websocket
+            if ("WebSocket" in window) {
+                websocket = new ReconnectingWebSocket("ws://localhost:8080/send/" + username);
+                websocket.reconnectInterval = 3000 //延長為每3s進行一次重新連線(預設是每秒)
+            } else if ('MozWebSocket' in window) { //此處針對火狐6.0以下版本
+                websocket = new MozWebSocket("ws://localhost:8080/send/" + username);
+            } else {
+                setMessage("瀏覽器過於老舊，請改用新版Chrome或FireFox後再次嘗試");
+            }
+        }
+        websocket.onopen = function (event) {            setMessage("connected");        }
+        websocket.onclose = function (event) {            setMessage("disconnected");        }
+        websocket.onmessage = function (event) {            setMessageTxt(event.data)        }
+        websocket.onerror = function (event) {            setMessage("error, reconnecting");        }
+        //監控視窗關閉事件，當瀏覽器視窗關閉時，主動關閉websocket連線(若未斷線就直接關視窗，伺服器端會拋exception)
+        window.onbeforeunload = function () {
+            closeWebsocket();
+        }
+    }
+
+    // 發送訊息
+    function sendMessage() {
+        //若1(已連線狀態)時，寄送
+        if (1 == websocket.readyState) {
+            var message = document.getElementById('send_content').value;
+            var div = document.createElement('div')
+            div.innerHTML = "<div class='name r rcontent'><h2> Me </h2></div>" +
+                "<div class='content w r'>" + message + "</div>"
+            div.setAttribute("class", "send_info")
+            document.getElementById('index').appendChild(div)
+            ruser = document.getElementById("ruser").value;
+            message = "{'content':'" + message + "','to_topic':'" + ruser + "'}"
+            websocket.send(message);
+        } else {
+            alert("websocket未連線");
+        }
+        document.getElementById('send_content').value = "";
+        document.getElementById('send_content').focus();
+    }
+
+    //關閉websocket
+    function closeWebsocket() {
+        //3代表已經關閉
+        if (3 != websocket.readyState) {
+            websocket.close();
+        } else {
+            alert("websocket之前已經關閉");
+        }
+    }
+    //在頁面追加顯示聊天內容
+    function setMessageTxt(message) {
+        mObj = JSON.parse(message)
+        var div = document.createElement('div')
+        div.innerHTML = "<div class='name l'><h2>" + mObj['from_topic'] + "</h2></div>" +
+            "<div class='content w l'>" + mObj['content'] + "</div>"
+        div.setAttribute("class", "from_info")
+        document.getElementById('index').appendChild(div)
+    }
+    //跳對話提示系統訊息用的
+    function setMessage(message) {
+        alert(message)
+    }
+</script>
+</body>
+</html>
